@@ -32,6 +32,9 @@ hdiutil detach /Volumes/SilentAirDrop
 cd ~
 rm -rf "$TEMP_DIR"
 
+echo "🧹 Removing quarantine flag (Gatekeeper)..."
+xattr -d com.apple.quarantine /Applications/SilentAirDrop.app 2>/dev/null
+
 echo "✨ Opening SilentAirDrop..."
 # Open the app (this will trigger the Accessibility prompts)
 open /Applications/SilentAirDrop.app

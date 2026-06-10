@@ -1,43 +1,74 @@
-# SilentAirDrop
+# 📡 SilentAirDrop
+
+[![Platform](https://img.shields.io/badge/platform-macOS_13.0+-blue.svg)](https://developer.apple.com/macos/)
+[![Language](https://img.shields.io/badge/language-Swift_5.9-orange.svg)](https://developer.apple.com/swift/)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
 A lightweight macOS menu bar utility that prevents the annoying Finder "Downloads" window from auto-opening and stealing focus after receiving files via AirDrop.
 
-## The Problem
-Every time you receive a file via AirDrop, macOS forces Finder to open the Downloads folder and switches your active Space. This disrupts your workflow, especially if you are working in full-screen apps or multiple desktops.
+---
 
-## The Solution
-**SilentAirDrop** is a background Swift daemon packed inside a lightweight `.app` bundle. It features:
-- 🚀 **Zero-latency:** Uses FSEvents to detect new files instantly.
-- 🎯 **Smart Detection:** Uses extended file attributes (`xattr`) to verify if the file actually came from AirDrop (via `sharingd`).
-- 🧠 **User-Aware:** Won't block you if you open Finder manually.
-- 🍏 **Native UI:** Simple Menu Bar icon to manage the app (toggle blocker, auto-launch, hide icon).
+## 🛑 The Problem
 
-## Installation
+Every time you receive a file via AirDrop, macOS forces Finder to open the `Downloads` folder and switches your active Space. This disrupts your workflow, especially if you are working in full-screen apps, coding, or gaming on multiple virtual desktops.
 
-### Method 1: The Easy Way (GUI)
-1. Go to the [Releases](../../releases) page and download `SilentAirDrop.dmg`.
-2. Double-click the downloaded `.dmg` file to open it.
-3. Drag the **SilentAirDrop.app** icon into the **Applications** folder.
-4. Launch the app from Applications. Follow the prompts to grant **Accessibility** permissions and allow access to the **Downloads** folder.
+## 🚀 The Solution
 
-### Method 2: The Geek Way (Terminal)
-If you prefer the command line, just paste this one-liner into your Terminal. It will automatically download the latest `.dmg`, install it to `/Applications`, and launch it:
+**SilentAirDrop** is a background Swift daemon packaged inside a lightweight `.app` bundle.
+- **Zero-latency:** Uses `FSEvents` to detect new files instantly.
+- **Smart Detection:** Verifies if the file actually came from AirDrop (via `sharingd`).
+- **User-Aware:** Won't block you if you open Finder manually (uses a 0.4s idle check).
+- **Native UI:** Simple Menu Bar icon to manage the app (toggle blocker, auto-launch, hide icon).
+
+---
+
+## 📦 Installation
+
+### Method 1: Pre-built Binary (Recommended)
+
+1. Go to the [Releases](https://github.com/gaptriko/SilentAirDrop/releases) page and download `SilentAirDrop.dmg`.
+2. Open the `.dmg` and drag **SilentAirDrop.app** into your **Applications** folder.
+3. Launch the app. 
+
+> [!IMPORTANT]
+> Since this app is compiled locally and not signed with a paid Apple Developer certificate, macOS Gatekeeper might block it.
+>
+> **To fix this, run this command in Terminal:**
+> ```bash
+> xattr -d com.apple.quarantine /Applications/SilentAirDrop.app
+> ```
+
+4. Follow the prompts to grant **Accessibility** permissions (required to manage Finder focus) and allow access to the **Downloads** folder (required to detect incoming files).
+
+### Method 2: Install via Terminal One-Liner
+
 ```bash
 curl -sL https://raw.githubusercontent.com/gaptriko/SilentAirDrop/main/install.sh | bash
 ```
 
-## Build from Source
-If you prefer to build the application from source yourself:
+### Method 3: Build from Source
+
 ```bash
 git clone https://github.com/gaptriko/SilentAirDrop.git
 cd SilentAirDrop
 chmod +x build.sh
 ./build.sh
 ```
-This will compile the Swift code and generate a fresh `SilentAirDrop.dmg` ready to use.
 
-## Requirements
-- macOS 13.0 or newer (Ventura).
+---
 
-## License
-MIT
+## 🛠 How it Works Under the Hood
+
+SilentAirDrop runs as a lightweight menu bar app (`.accessory` activation policy).
+1. It registers an **FSEvent Stream** on the `~/Downloads` folder to detect changes.
+2. It listens to `NSWorkspace.didActivateApplicationNotification`.
+3. When Finder activates, it checks:
+   - Was there a file write in the last 5 seconds?
+   - Has the user been idle (no keyboard/mouse input) for at least 0.4 seconds?
+4. If both conditions are met, it identifies the event as an AirDrop trigger, returns the focus to your previously active application, and closes the newly opened "Downloads" window via **Accessibility API** (`AXUIElement`).
+
+---
+
+## 📄 License
+
+MIT License. Feel free to contribute!
