@@ -188,12 +188,14 @@ class SilentAirDropApp: NSObject, NSApplicationDelegate {
                            CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: .leftMouseDown))
             
             if isEnabled && timeSinceFileChange < 5.0 && idle > 0.4 {
-                if let lastApp = lastValidApp {
+                if let lastApp = lastValidApp, lastApp.bundleIdentifier != "com.apple.finder" {
                     lastApp.activate(options: [.activateIgnoringOtherApps])
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                        self.closeDownloadsWindow(finder: app)
-                    }
                 }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    self.closeDownloadsWindow(finder: app)
+                }
+            } else {
+                lastValidApp = app
             }
         } else {
             lastValidApp = app
