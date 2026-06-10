@@ -70,13 +70,6 @@ SilentAirDrop runs as a lightweight menu bar app (`.accessory` activation policy
 
 ---
 
-## 👤 Author
-
-- **X (Twitter):** [@gaptriko](https://x.com/gaptriko)
-- **GitHub:** [gaptriko](https://github.com/gaptriko)
-
----
-
 ## 📄 License
 
 MIT License. Feel free to contribute!
