@@ -3,6 +3,7 @@
 [![Platform](https://img.shields.io/badge/platform-macOS_13.0+-blue.svg)](https://developer.apple.com/macos/)
 [![Language](https://img.shields.io/badge/language-Swift_5.9-orange.svg)](https://developer.apple.com/swift/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![X (Twitter)](https://img.shields.io/badge/X-%40gaptriko-black.svg?style=flat&logo=x&logoColor=white)](https://x.com/gaptriko)
 
 A lightweight macOS menu bar utility that prevents the annoying Finder "Downloads" window from auto-opening and stealing focus after receiving files via AirDrop.
 
@@ -66,6 +67,13 @@ SilentAirDrop runs as a lightweight menu bar app (`.accessory` activation policy
    - Was there a file write in the last 5 seconds?
    - Has the user been idle (no keyboard/mouse input) for at least 0.4 seconds?
 4. If both conditions are met, it identifies the event as an AirDrop trigger, returns the focus to your previously active application, and closes the newly opened "Downloads" window via **Accessibility API** (`AXUIElement`).
+
+---
+
+## 👤 Author
+
+- **X (Twitter):** [@gaptriko](https://x.com/gaptriko)
+- **GitHub:** [gaptriko](https://github.com/gaptriko)
 
 ---
 
