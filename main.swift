@@ -40,7 +40,11 @@ class SilentAirDropApp: NSObject, NSApplicationDelegate {
             let task = Process()
             task.launchPath = "/bin/zsh"
             task.arguments = ["-c", script]
-            task.launch()
+            do {
+                try task.run()
+            } catch {
+                print("Failed to run system tweaks: \(error)")
+            }
             UserDefaults.standard.set(true, forKey: "SystemTweaksV2")
         }
     }
@@ -166,13 +170,16 @@ class SilentAirDropApp: NSObject, NSApplicationDelegate {
         var eventContext = FSEventStreamContext(version: 0, info: context, retain: nil, release: nil, copyDescription: nil)
         let paths = [pathString] as CFArray
         
-        let stream = FSEventStreamCreate(nil, { (stream, clientCallBackInfo, numEvents, eventPaths, eventFlags, eventIds) in
+        guard let stream = FSEventStreamCreate(nil, { (stream, clientCallBackInfo, numEvents, eventPaths, eventFlags, eventIds) in
             let watcher = Unmanaged<SilentAirDropApp>.fromOpaque(clientCallBackInfo!).takeUnretainedValue()
             watcher.lastFileChangeTime = Date()
-        }, &eventContext, paths, FSEventStreamEventId(kFSEventStreamEventIdSinceNow), 0.1, UInt32(kFSEventStreamCreateFlagFileEvents))
+        }, &eventContext, paths, FSEventStreamEventId(kFSEventStreamEventIdSinceNow), 0.1, UInt32(kFSEventStreamCreateFlagFileEvents)) else {
+            print("Failed to create FSEventStream")
+            return
+        }
         
-        FSEventStreamScheduleWithRunLoop(stream!, CFRunLoopGetCurrent(), CFRunLoopMode.defaultMode.rawValue)
-        FSEventStreamStart(stream!)
+        FSEventStreamSetDispatchQueue(stream, DispatchQueue.main)
+        FSEventStreamStart(stream)
     }
 
     private func setupNotificationObservers() {
@@ -207,12 +214,14 @@ class SilentAirDropApp: NSObject, NSApplicationDelegate {
         var windowsValue: AnyObject?
         AXUIElementCopyAttributeValue(finderElement, kAXWindowsAttribute as CFString, &windowsValue)
         
+        let localizedDownloads = FileManager.default.displayName(atPath: downloadsPath.path)
+        
         if let windows = windowsValue as? [AXUIElement] {
             for window in windows {
                 var titleValue: AnyObject?
                 AXUIElementCopyAttributeValue(window, kAXTitleAttribute as CFString, &titleValue)
                 let title = titleValue as? String ?? ""
-                if title == "Downloads" || title == "Загрузки" {
+                if title == localizedDownloads || title == "Downloads" || title == "Загрузки" {
                     AXUIElementPerformAction(window, kAXCancelAction as CFString)
                 }
             }
