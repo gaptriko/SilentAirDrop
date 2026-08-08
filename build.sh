@@ -1,10 +1,14 @@
 #!/bin/bash
 
+set -euo pipefail
+
 # SilentAirDrop Build Script
 
 APP_NAME="SilentAirDrop"
 APP_BUNDLE="${APP_NAME}.app"
 DMG_NAME="${APP_NAME}.dmg"
+SWIFT_SOURCES=(main.swift FileBehaviorRules.swift FileRulesWindowController.swift)
+SILENT_AIRDROP_MODULE_CACHE="${TMPDIR:-/tmp}/SilentAirDropModuleCache"
 
 echo "📦 Building $APP_NAME..."
 
@@ -13,6 +17,7 @@ rm -rf "$APP_BUNDLE"
 rm -f "$DMG_NAME"
 mkdir -p "$APP_BUNDLE/Contents/MacOS"
 mkdir -p "$APP_BUNDLE/Contents/Resources"
+mkdir -p "$SILENT_AIRDROP_MODULE_CACHE"
 
 # 2. Copy Plist & Icon
 cp Info.plist "$APP_BUNDLE/Contents/"
@@ -23,25 +28,22 @@ echo "🔨 Compiling Swift code..."
 
 # Compile for arm64
 echo "  ▸ Compiling arm64..."
-swiftc main.swift -o "SilentAirDrop_arm64" \
+swiftc "${SWIFT_SOURCES[@]}" -o "SilentAirDrop_arm64" \
     -target arm64-apple-macos13.0 \
-    -O -framework AppKit -framework Foundation -framework CoreGraphics -framework ServiceManagement
+    -module-cache-path "$SILENT_AIRDROP_MODULE_CACHE" \
+    -O -framework AppKit -framework Foundation -framework CoreGraphics -framework ServiceManagement -framework UniformTypeIdentifiers
     
 # Compile for x86_64
 echo "  ▸ Compiling x86_64..."
-swiftc main.swift -o "SilentAirDrop_x86" \
+swiftc "${SWIFT_SOURCES[@]}" -o "SilentAirDrop_x86" \
     -target x86_64-apple-macos13.0 \
-    -O -framework AppKit -framework Foundation -framework CoreGraphics -framework ServiceManagement
+    -module-cache-path "$SILENT_AIRDROP_MODULE_CACHE" \
+    -O -framework AppKit -framework Foundation -framework CoreGraphics -framework ServiceManagement -framework UniformTypeIdentifiers
 
 # Combine into Universal Binary
 echo "  ▸ Creating Universal Binary with lipo..."
 lipo -create "SilentAirDrop_arm64" "SilentAirDrop_x86" -output "$APP_BUNDLE/Contents/MacOS/$APP_NAME"
 rm "SilentAirDrop_arm64" "SilentAirDrop_x86"
-
-if [ $? -ne 0 ]; then
-    echo "❌ Compilation or Lipo failed."
-    exit 1
-fi
 
 # 4. Clean extended attributes (Required for codesign)
 echo "🧹 Cleaning extended attributes..."

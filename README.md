@@ -16,8 +16,9 @@ Every time you receive a file via AirDrop, macOS forces Finder to open the `Down
 ## 🚀 The Solution
 
 **SilentAirDrop** is a background Swift daemon packaged inside a lightweight `.app` bundle.
-- **Zero-latency:** Uses `FSEvents` to detect new files instantly.
-- **Smart Detection:** Verifies if the file actually came from AirDrop (via `sharingd`).
+- **Fast detection:** Uses file-level `FSEvents` with a short debounce to collect multi-file transfers.
+- **Path-aware detection:** Uses file-level events for new items directly inside Downloads.
+- **Per-file rules:** Keep Finder closed—or let it open—for broad file types and exact extensions.
 - **User-Aware:** Won't block you if you open Finder manually (uses a 0.4s idle check).
 - **Native UI:** Simple Menu Bar icon to manage the app (toggle blocker, auto-launch, hide icon).
 
@@ -58,15 +59,45 @@ chmod +x build.sh
 
 ---
 
+## ⚙️ Settings and File Rules
+
+Open the menu bar icon and choose **Settings…** to configure:
+
+- Whether SilentAirDrop is enabled.
+- Launch at login. This option is available when SilentAirDrop is opened from `/Applications` or `~/Applications`; Settings explains what to do when it is unavailable.
+- Menu bar icon visibility. Hiding it lasts until SilentAirDrop is launched again.
+- A link to the [SilentAirDrop GitHub repository](https://github.com/gaptriko/SilentAirDrop).
+
+If macOS requires approval for Launch at Login, Settings shows a shortcut to the Login Items system panel.
+
+The File Rules section includes:
+
+- A default behavior for unmatched files.
+- Overrides for images, video, audio, PDFs, archives, documents, apps and disk images, folders, or other files.
+- Exact extension overrides such as `dmg`, `jpg`, or `tar.gz`.
+- Import and export of File Rules using a versioned JSON file.
+
+Exact extensions are case-insensitive and take priority over file-type rules. If a transfer contains multiple items, Finder opens when any item is configured to **Let Finder open**. Rules apply immediately and persist across launches.
+
+Export includes the File Rules currently shown in Settings, including unsaved edits. Import replaces the rules shown for review but does not apply them until you click **Save**. General settings such as Launch at Login are never included.
+
+For example, you can keep Finder closed for everything except `.dmg` files, or let Finder open for archives while keeping image transfers silent. SilentAirDrop never moves, renames, or deletes received files.
+
+> [!NOTE]
+> macOS file-system events do not identify the app that created a file. SilentAirDrop applies these rules to new top-level items detected in Downloads during its short Finder-activation window.
+
+---
+
 ## 🛠 How it Works Under the Hood
 
 SilentAirDrop runs as a lightweight menu bar app (`.accessory` activation policy).
-1. It registers an **FSEvent Stream** on the `~/Downloads` folder to detect changes.
-2. It listens to `NSWorkspace.didActivateApplicationNotification`.
-3. When Finder activates, it checks:
+1. It registers a file-level **FSEvent Stream** on the `~/Downloads` folder and records newly created or renamed top-level items.
+2. It classifies each item using its exact extension and macOS `UTType` metadata.
+3. It listens to `NSWorkspace.didActivateApplicationNotification`.
+4. When Finder activates, it checks:
    - Was there a file write in the last 5 seconds?
    - Has the user been idle (no keyboard/mouse input) for at least 0.4 seconds?
-4. If both conditions are met, it identifies the event as an AirDrop trigger, returns the focus to your previously active application, and closes the newly opened "Downloads" window via **Accessibility API** (`AXUIElement`).
+5. It resolves exact-extension rules first, then file-type rules, then the default behavior. If every recent item should stay silent, it restores the previous app and closes the newly opened Downloads window through the **Accessibility API** (`AXUIElement`).
 
 ---
 
