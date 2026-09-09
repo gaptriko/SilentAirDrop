@@ -575,7 +575,10 @@ class SilentAirDropApp: NSObject, NSApplicationDelegate {
             let files = recentFiles(at: now)
             let fileBehavior = files.isEmpty ? fileBehaviorPolicy.defaultBehavior : fileBehaviorPolicy.behavior(for: files)
 
-            if isEnabled && timeSinceFileChange < fileChangeWindow && idleAtActivation > 0.4 && fileBehavior == .keepFinderClosed {
+            let isRecentAirDrop = timeSinceFileChange >= 0 && timeSinceFileChange < 4.0
+            let isIdleRecent = timeSinceFileChange >= 0 && timeSinceFileChange < fileChangeWindow && idleAtActivation > 0.4
+
+            if isEnabled && (isRecentAirDrop || isIdleRecent) && fileBehavior == .keepFinderClosed {
                 if let lastApp = lastValidApp,
                    let bid = lastApp.bundleIdentifier,
                    bid != "com.apple.finder",
@@ -628,7 +631,18 @@ class SilentAirDropApp: NSObject, NSApplicationDelegate {
         }
 
         if !closedAny {
-            let script = "tell application \"Finder\" to close (every window whose name is \"\(localizedDownloads)\" or name is \"Downloads\" or name is \"Загрузки\")"
+            let script = """
+            tell application "Finder"
+                repeat with w in (get every window)
+                    try
+                        set wn to name of w
+                        if wn is "\(localizedDownloads)" or wn is "Downloads" or wn is "Загрузки" then
+                            close w
+                        end if
+                    end try
+                end repeat
+            end tell
+            """
             if let appleScript = NSAppleScript(source: script) {
                 var error: NSDictionary?
                 appleScript.executeAndReturnError(&error)
