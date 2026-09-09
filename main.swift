@@ -646,29 +646,21 @@ class SilentAirDropApp: NSObject, NSApplicationDelegate {
             return
         }
 
-        if isEnabled,
-           idleAtActivation > 0.4,
-           hasRecentFileChange,
-           timeSinceFileChange < transferBatchQuietPeriod {
-            enqueueFinderEvaluation(
-                after: transferBatchQuietPeriod - timeSinceFileChange,
-                app: app,
-                idleAtActivation: idleAtActivation,
-                activatedAt: activatedAt,
-                evaluationGeneration: evaluationGeneration
-            )
-            return
-        }
-
         let fileBehavior = fileBehaviorPolicy.behavior(for: files)
 
         if isEnabled
             && hasRecentFileChange
             && idleAtActivation > 0.4
             && fileBehavior == .keepFinderClosed {
-            if let lastApp = lastValidApp, lastApp.bundleIdentifier != "com.apple.finder" {
+            if let lastApp = lastValidApp,
+               let bid = lastApp.bundleIdentifier,
+               bid != "com.apple.finder",
+               bid != Bundle.main.bundleIdentifier {
                 lastApp.activate(options: [.activateIgnoringOtherApps])
+            } else {
+                app.hide()
             }
+            self.closeDownloadsWindow(finder: app)
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                 self.closeDownloadsWindow(finder: app)
             }
@@ -687,6 +679,7 @@ class SilentAirDropApp: NSObject, NSApplicationDelegate {
         AXUIElementCopyAttributeValue(finderElement, kAXWindowsAttribute as CFString, &windowsValue)
         
         let localizedDownloads = FileManager.default.displayName(atPath: downloadsPath.path)
+        var closedAny = false
         
         if let windows = windowsValue as? [AXUIElement] {
             for window in windows {
@@ -694,8 +687,23 @@ class SilentAirDropApp: NSObject, NSApplicationDelegate {
                 AXUIElementCopyAttributeValue(window, kAXTitleAttribute as CFString, &titleValue)
                 let title = titleValue as? String ?? ""
                 if title == localizedDownloads || title == "Downloads" || title == "Загрузки" {
-                    AXUIElementPerformAction(window, kAXCancelAction as CFString)
+                    var closeButtonVal: AnyObject?
+                    if AXUIElementCopyAttributeValue(window, kAXCloseButtonAttribute as CFString, &closeButtonVal) == .success,
+                       let closeButton = closeButtonVal {
+                        let res = AXUIElementPerformAction(closeButton as! AXUIElement, kAXPressAction as CFString)
+                        if res == .success {
+                            closedAny = true
+                        }
+                    }
                 }
+            }
+        }
+
+        if !closedAny {
+            let script = "tell application \"Finder\" to close (every window whose name is \"\(localizedDownloads)\" or name is \"Downloads\" or name is \"Загрузки\")"
+            if let appleScript = NSAppleScript(source: script) {
+                var error: NSDictionary?
+                appleScript.executeAndReturnError(&error)
             }
         }
     }
