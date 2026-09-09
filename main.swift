@@ -37,8 +37,6 @@ class SilentAirDropApp: NSObject, NSApplicationDelegate {
     private var finderEvaluationGeneration = 0
     private let fileChangeWindow: TimeInterval = 5.0
     private let transferBatchQuietPeriod: TimeInterval = 0.5
-    private let finderEvaluationDelay: TimeInterval = 0.15
-    private let finderEventGracePeriod: TimeInterval = 0.5
     
     // Settings keys
     private let kEnabledKey = "SilentAirDropEnabled"
@@ -447,6 +445,7 @@ class SilentAirDropApp: NSObject, NSApplicationDelegate {
         flags: [FSEventStreamEventFlags],
         detectedAt: Date
     ) {
+        lastFileChangeTime = detectedAt
         pruneRecentDownloadCandidates(at: detectedAt)
 
         let eventCount = min(paths.count, flags.count)
@@ -546,9 +545,6 @@ class SilentAirDropApp: NSObject, NSApplicationDelegate {
             date.timeIntervalSince($0.value.detectedAt) < fileChangeWindow
                 && FileManager.default.fileExists(atPath: $0.value.file.url.path)
         }
-        if recentDownloadCandidates.isEmpty {
-            lastFileChangeTime = .distantPast
-        }
     }
 
     private func recentFiles(at date: Date) -> [FileCandidate] {
@@ -569,107 +565,39 @@ class SilentAirDropApp: NSObject, NSApplicationDelegate {
         guard let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication else { return }
 
         if app.bundleIdentifier == "com.apple.finder" {
+            let now = Date()
+            let timeSinceFileChange = now.timeIntervalSince(lastFileChangeTime)
             let idleAtActivation = min(
                 CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: .keyDown),
                 CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: .leftMouseDown)
             )
-            scheduleFinderEvaluation(app: app, idleAtActivation: idleAtActivation)
+
+            let files = recentFiles(at: now)
+            let fileBehavior = files.isEmpty ? fileBehaviorPolicy.defaultBehavior : fileBehaviorPolicy.behavior(for: files)
+
+            if isEnabled && timeSinceFileChange < fileChangeWindow && idleAtActivation > 0.4 && fileBehavior == .keepFinderClosed {
+                if let lastApp = lastValidApp,
+                   let bid = lastApp.bundleIdentifier,
+                   bid != "com.apple.finder",
+                   bid != Bundle.main.bundleIdentifier {
+                    lastApp.activate(options: [.activateIgnoringOtherApps])
+                } else {
+                    app.hide()
+                }
+                self.closeDownloadsWindow(finder: app)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    self.closeDownloadsWindow(finder: app)
+                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    self.closeDownloadsWindow(finder: app)
+                }
+                consumeRecentDownloadCandidates()
+            } else {
+                lastValidApp = app
+            }
         } else {
             finderEvaluationGeneration += 1
             lastValidApp = app
-        }
-    }
-
-    private func scheduleFinderEvaluation(app: NSRunningApplication, idleAtActivation: CFTimeInterval) {
-        finderEvaluationGeneration += 1
-        let evaluationGeneration = finderEvaluationGeneration
-        let activatedAt = Date()
-
-        enqueueFinderEvaluation(
-            after: finderEvaluationDelay,
-            app: app,
-            idleAtActivation: idleAtActivation,
-            activatedAt: activatedAt,
-            evaluationGeneration: evaluationGeneration
-        )
-    }
-
-    private func enqueueFinderEvaluation(
-        after delay: TimeInterval,
-        app: NSRunningApplication,
-        idleAtActivation: CFTimeInterval,
-        activatedAt: Date,
-        evaluationGeneration: Int
-    ) {
-        DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self, weak app] in
-            guard let self,
-                  let app,
-                  self.finderEvaluationGeneration == evaluationGeneration,
-                  NSWorkspace.shared.frontmostApplication?.processIdentifier == app.processIdentifier else {
-                return
-            }
-            self.evaluateFinderActivation(
-                app: app,
-                idleAtActivation: idleAtActivation,
-                activatedAt: activatedAt,
-                evaluationGeneration: evaluationGeneration
-            )
-        }
-    }
-
-    private func evaluateFinderActivation(
-        app: NSRunningApplication,
-        idleAtActivation: CFTimeInterval,
-        activatedAt: Date,
-        evaluationGeneration: Int
-    ) {
-        let now = Date()
-        let timeSinceFileChange = now.timeIntervalSince(lastFileChangeTime)
-        let files = recentFiles(at: now)
-        let hasRecentFileChange = !files.isEmpty
-            && timeSinceFileChange >= 0
-            && timeSinceFileChange < fileChangeWindow
-
-        if isEnabled,
-           idleAtActivation > 0.4,
-           !hasRecentFileChange,
-           now.timeIntervalSince(activatedAt) < finderEventGracePeriod {
-            let remainingGracePeriod = finderEventGracePeriod - now.timeIntervalSince(activatedAt)
-            let retryDelay = min(finderEvaluationDelay, remainingGracePeriod)
-            enqueueFinderEvaluation(
-                after: retryDelay,
-                app: app,
-                idleAtActivation: idleAtActivation,
-                activatedAt: activatedAt,
-                evaluationGeneration: evaluationGeneration
-            )
-            return
-        }
-
-        let fileBehavior = fileBehaviorPolicy.behavior(for: files)
-
-        if isEnabled
-            && hasRecentFileChange
-            && idleAtActivation > 0.4
-            && fileBehavior == .keepFinderClosed {
-            if let lastApp = lastValidApp,
-               let bid = lastApp.bundleIdentifier,
-               bid != "com.apple.finder",
-               bid != Bundle.main.bundleIdentifier {
-                lastApp.activate(options: [.activateIgnoringOtherApps])
-            } else {
-                app.hide()
-            }
-            self.closeDownloadsWindow(finder: app)
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                self.closeDownloadsWindow(finder: app)
-            }
-        } else {
-            lastValidApp = app
-        }
-
-        if hasRecentFileChange {
-            consumeRecentDownloadCandidates()
         }
     }
 
